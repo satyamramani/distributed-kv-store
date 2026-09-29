@@ -1,6 +1,8 @@
 #ifndef KVSTORE_SSTABLE_H
 #define KVSTORE_SSTABLE_H
 
+#include <cstdint>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,10 +16,26 @@ struct SSTableEntry {
     bool is_tombstone;  // true → this entry represents a deletion
 };
 
+/// Index entry: maps a key to its byte offset in the data section.
+/// Used by SSTableReader to perform O(log n) binary search lookups.
+struct IndexEntry {
+    std::string key;
+    uint64_t offset;  // byte offset of this entry's data in the file
+};
+
 /// Writes a sorted sequence of entries to an immutable SSTable file on disk.
 ///
-/// File format (per entry):
-///   [4B key_len | key_bytes | 4B val_len | val_bytes | 1B is_tombstone]
+/// File format:
+///   ┌──────────────────────────────────────────────────┐
+///   │  DATA SECTION  (per entry, back-to-back):        │
+///   │  [8B key_len | key | 8B val_len | value | 1B ts] │
+///   ├──────────────────────────────────────────────────┤
+///   │  INDEX SECTION (per entry):                      │
+///   │  [8B key_len | key | 8B data_offset]             │
+///   ├──────────────────────────────────────────────────┤
+///   │  FOOTER (fixed 16 bytes):                        │
+///   │  [8B index_offset | 8B entry_count]              │
+///   └──────────────────────────────────────────────────┘
 class SSTableWriter {
 public:
     /// Write all entries to the given file path.  Entries MUST be sorted by key.
@@ -27,9 +45,12 @@ public:
 };
 
 /// Reads from an existing SSTable file.
+///
+/// On construction, loads the index section into memory so that point
+/// lookups (get) and range scans (scan) can use binary search — O(log n).
 class SSTableReader {
 public:
-    /// Open an SSTable file for reading.
+    /// Open an SSTable file for reading.  Loads the in-memory index.
     explicit SSTableReader(const std::string& filepath);
 
     /// Point lookup — returns the entry for `key`, or nullopt.
@@ -47,6 +68,13 @@ public:
 
 private:
     std::string filepath_;
+    std::vector<IndexEntry> index_;  // in-memory index, loaded from footer
+
+    /// Load the index from the file's index section + footer.
+    void loadIndex();
+
+    /// Read a single SSTableEntry starting at the given byte offset.
+    SSTableEntry readEntryAt(std::ifstream& ifs, uint64_t offset) const;
 };
 
 }  // namespace kvstore
