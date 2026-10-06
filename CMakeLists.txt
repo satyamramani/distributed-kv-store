@@ -64,6 +64,11 @@ add_executable(kvstore src/main.cpp)
 target_link_libraries(kvstore PRIVATE kvstore_lib)
 target_compile_options(kvstore PRIVATE ${KVSTORE_WARNINGS})
 
+# ── Native HTTP API Server ───────────────────────────────────────────────────
+add_executable(kvstore_server src/server.cpp)
+target_link_libraries(kvstore_server PRIVATE kvstore_lib)
+target_compile_options(kvstore_server PRIVATE ${KVSTORE_WARNINGS})
+
 # ── Testing ──────────────────────────────────────────────────────────────────
 option(BUILD_TESTS "Build unit tests" ON)
 

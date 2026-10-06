@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed KV-Store Visualizer | Dynamo Architecture</title>
+  <meta name="description" content="Interactive visualizer and playground for distributed key-value store featuring consistent hashing, gossip failure detection, LSM storage engine, vector clocks, and Merkle tree anti-entropy.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="logo-area">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>Distributed KV-Store</h1>
+          <span class="badge-subtitle">Dynamo / Cassandra Architecture</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-tab="hash-ring" id="tab-hash-ring">
+          <span class="tab-icon">🌐</span>
+          <span>Consistent Hash Ring</span>
+        </button>
+        <button class="nav-tab" data-tab="gossip" id="tab-gossip">
+          <span class="tab-icon">📡</span>
+          <span>Gossip & Failure Detection</span>
+        </button>
+        <button class="nav-tab" data-tab="storage-engine" id="tab-storage-engine">
+          <span class="tab-icon">💾</span>
+          <span>LSM Storage Engine</span>
+        </button>
+        <button class="nav-tab" data-tab="vector-clock" id="tab-vector-clock">
+          <span class="tab-icon">⏱️</span>
+          <span>Vector Clocks</span>
+        </button>
+        <button class="nav-tab" data-tab="merkle-tree" id="tab-merkle-tree">
+          <span class="tab-icon">🌳</span>
+          <span>Merkle Anti-Entropy</span>
+        </button>
+      </nav>
+
+      <div class="header-status">
+        <span class="cluster-badge pulse" id="backend-status-badge">
+          <span class="status-dot"></span>
+          <span id="backend-status-text">C++ Backend Active</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Unified Cluster Global Health & Actions Bar -->
+      <div class="cluster-summary-bar">
+        <div class="summary-stat-group">
+          <div class="summary-stat">
+            <span class="stat-lbl">Active Topology</span>
+            <span class="stat-num" id="global-nodes-count">3 Nodes</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-lbl">Gossip Liveness</span>
+            <span class="stat-num text-success" id="global-alive-count">3 Alive</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-lbl">Gossip Failures</span>
+            <span class="stat-num text-danger" id="global-dead-count">0 Dead</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-lbl">Cluster Keys</span>
+            <span class="stat-num text-cyan" id="global-keys-count">0 Keys</span>
+          </div>
+        </div>
+
+        <div class="summary-actions-group">
+          <div class="global-add-node-box">
+            <input type="text" id="global-new-node-input" placeholder="New node ID (e.g. node-delta)">
+            <button class="btn btn-sm btn-primary" id="global-btn-add-node">+ Add Node</button>
+          </div>
+          <button class="btn btn-sm btn-secondary" id="global-btn-seed-demo" title="Seed realistic distributed keys across all replicas">
+            ⚡ Seed Demo Cluster
+          </button>
+          <button class="btn btn-sm btn-warning" id="global-btn-chaos-toggle" title="Crash a node to trigger failure detection and replica divergence">
+            💥 Chaos: Crash Replica
+          </button>
+        </div>
+      </div>
+      
+      <!-- ================================================================= -->
+      <!-- TAB 1: Consistent Hash Ring -->
+      <!-- ================================================================= -->
+      <section id="section-hash-ring" class="tab-pane active">
+        <div class="pane-grid two-col">
+          <!-- Left: Interactive Canvas Visualizer -->
+          <div class="card visualizer-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>32-Bit Hash Ring Visualization</h3>
+                <p class="card-desc">0 to 2³² - 1 circular hash space. Physical nodes map to multiple virtual nodes to ensure even distribution.</p>
+              </div>
+              <div class="ring-stats">
+                <span class="stat-pill"><strong id="stat-node-count">3</strong> Physical Nodes</span>
+                <span class="stat-pill"><strong id="stat-vnode-count">450</strong> Virtual Nodes</span>
+              </div>
+            </div>
+            
+            <div class="ring-canvas-container">
+              <svg id="hash-ring-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet">
+                <!-- Outer ring background -->
+                <circle cx="300" cy="300" r="230" class="ring-track"></circle>
+                <circle cx="300" cy="300" r="230" class="ring-highlight" id="ring-arc-highlight"></circle>
+                
+                <!-- Center Info Box -->
+                <g class="center-info" transform="translate(300, 300)">
+                  <circle cx="0" cy="0" r="95" class="center-circle"></circle>
+                  <text y="-25" class="center-label">CLOCKWISE WALK</text>
+                  <text y="5" class="center-val" id="center-status-text">Ready</text>
+                  <text y="28" class="center-sub" id="center-sub-text">Route any key</text>
+                </g>
+
+                <!-- Virtual Node points and Key marker injected here -->
+                <g id="vnode-markers"></g>
+                <g id="key-marker-group"></g>
+              </svg>
+            </div>
+            
+            <div class="ring-legend" id="ring-legend">
+              <!-- Dynamically populated node color legend -->
+            </div>
+          </div>
+
+          <!-- Right: Controls & Interactive Router -->
+          <div class="side-controls-column">
+            <!-- Key Routing Playground -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Interactive Key Router</h3>
+              </div>
+              <p class="hint-text">Type a key and calculate which replica nodes own it via clockwise walk.</p>
+              
+              <div class="input-row">
+                <input type="text" id="route-key-input" placeholder="e.g. user:alice, order:9901, session:xyz" value="user:alice">
+                <button class="btn btn-primary" id="btn-route-key">
+                  <span>Route Key</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+
+              <div class="routing-result-box" id="routing-result-box">
+                <div class="result-row">
+                  <span class="label">32-Bit Hash:</span>
+                  <span class="code-val" id="route-hash-val">0x3f9a12c8 (1,067,053,768)</span>
+                </div>
+                <div class="result-row">
+                  <span class="label">Primary Replica:</span>
+                  <span class="badge-node" id="route-primary-node">node-alpha</span>
+                </div>
+                <div class="result-row">
+                  <span class="label">Secondary Replica:</span>
+                  <span class="badge-node secondary" id="route-secondary-node">node-beta</span>
+                </div>
+                <div class="result-row">
+                  <span class="label">Tertiary Replica:</span>
+                  <span class="badge-node tertiary" id="route-tertiary-node">node-gamma</span>
+                </div>
+                <div id="routing-failover-warning" style="display: none; margin-top: 0.65rem; color: #f87171; font-size: 0.8rem; font-weight: 600;"></div>
+                <button class="btn btn-secondary btn-block" id="btn-route-and-put" style="margin-top: 0.75rem;">
+                  ⚡ Write Key to Replicas (Distributed PUT)
+                </button>
+              </div>
+            </div>
+
+            <!-- Manage Physical Nodes -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Manage Cluster Nodes</h3>
+              </div>
+              <div class="input-row">
+                <input type="text" id="new-node-input" placeholder="New node id (e.g. node-delta)">
+                <button class="btn btn-secondary" id="btn-add-node">+ Add Node</button>
+              </div>
+              <div class="node-chips-list" id="physical-nodes-list">
+                <!-- Node chips with remove button -->
+              </div>
+            </div>
+
+            <!-- Preset Keys Quick-Test -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Quick Presets</h3>
+              </div>
+              <div class="chip-button-row">
+                <button class="chip-btn" data-key="user:alice">user:alice</button>
+                <button class="chip-btn" data-key="user:bob">user:bob</button>
+                <button class="chip-btn" data-key="order:9940">order:9940</button>
+                <button class="chip-btn" data-key="cart:charlie">cart:charlie</button>
+                <button class="chip-btn" data-key="doc:spec_v2">doc:spec_v2</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 2: Gossip & Failure Detection -->
+      <!-- ================================================================= -->
+      <section id="section-gossip" class="tab-pane">
+        <div class="pane-grid two-col">
+          <!-- Left: Node Heartbeat & Status Grid -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Decentralized Gossip Mesh</h3>
+                <p class="card-desc">Nodes periodically increment their own heartbeat counter and gossip membership tables to peers. Failure timeout detects dead nodes.</p>
+              </div>
+              <div class="actions-group">
+                <input type="text" id="gossip-new-node-input" placeholder="Node ID (e.g. node-delta)" style="padding: 0.35rem 0.65rem; font-size: 0.8rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: #fff; width: 150px;">
+                <button class="btn btn-sm btn-secondary" id="btn-gossip-add-node">+ Add to Gossip</button>
+                <button class="btn btn-sm btn-outline" id="btn-gossip-tick-all">Trigger Gossip Round</button>
+                <button class="btn btn-sm btn-outline" id="btn-gossip-auto-toggle">Auto-Gossip: ON</button>
+              </div>
+            </div>
+
+            <div class="gossip-nodes-grid" id="gossip-nodes-grid">
+              <!-- Dynamically populated live node cards -->
+            </div>
+
+            <!-- Visual Peer Connection Mesh -->
+            <div class="mesh-visual-panel">
+              <h4>Peer-to-Peer Gossip Traffic</h4>
+              <div class="packet-animation-stage" id="packet-stage">
+                <!-- Dynamic peer lines & pulsating packets -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Membership Tables & Failure Injection -->
+          <div class="side-controls-column">
+            <!-- Failure Injection Control -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Chaos Testing & Failures</h3>
+              </div>
+              <p class="hint-text">Simulate crashing a node (stops heartbeats). Watch peers detect failure when timeout threshold is exceeded.</p>
+              
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Failure Timeout:</span>
+                  <span id="failure-timeout-label"><strong>2000 ms</strong></span>
+                </div>
+                <input type="range" id="failure-timeout-slider" min="500" max="6000" step="250" value="2000">
+              </div>
+
+              <div class="node-kill-switches" id="node-kill-switches">
+                <!-- Node kill/revive toggle buttons -->
+              </div>
+            </div>
+
+            <!-- Inspect Local Membership View of Selected Node -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Membership Table View</h3>
+                <select id="select-viewing-node" class="dropdown-select"></select>
+              </div>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Node ID</th>
+                      <th>Heartbeat #</th>
+                      <th>Last Heard (Ago)</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="membership-table-body">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Gossip Events Stream -->
+            <div class="card log-card">
+              <div class="card-header">
+                <h3>Gossip Activity Log</h3>
+                <button class="btn btn-xs btn-outline" id="btn-clear-gossip-log">Clear</button>
+              </div>
+              <div class="terminal-log" id="gossip-log-stream">
+                <div class="log-entry system">[SYSTEM] Gossip cluster initialized with 3 nodes.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 3: LSM Storage Engine -->
+      <!-- ================================================================= -->
+      <section id="section-storage-engine" class="tab-pane">
+        <div class="lsm-container">
+          <!-- Top Controller Bar -->
+          <div class="card lsm-control-bar">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>LSM Storage Engine Playground</h3>
+                <p class="card-desc">Write path: <strong>WAL</strong> (Durability) ──► <strong>MemTable</strong> (Fast Memory) ──► <strong>SSTable</strong> (Immutable Disk Table + Bloom Filter).</p>
+              </div>
+              <div class="actions-group">
+                <button class="btn btn-secondary" id="btn-lsm-flush">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                  <span>Flush MemTable to SSTable</span>
+                </button>
+                <button class="btn btn-danger" id="btn-lsm-crash">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+                  <span>Crash Process</span>
+                </button>
+                <button class="btn btn-primary" id="btn-lsm-recover">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  <span>Replay WAL & Recover</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="lsm-io-row">
+              <div class="io-inputs">
+                <div class="input-with-label">
+                  <label for="lsm-select-node">Coordinator / Node:</label>
+                  <select id="lsm-select-node" class="dropdown-select"></select>
+                </div>
+                <input type="text" id="lsm-key-input" placeholder="Key (e.g. user:42)" value="user:101">
+                <input type="text" id="lsm-val-input" placeholder="Value (e.g. Alice)" value="Alice Smith">
+                <button class="btn btn-primary" id="btn-lsm-put">Replicated PUT</button>
+                <button class="btn btn-outline" id="btn-lsm-get">GET Key</button>
+                <button class="btn btn-danger-outline" id="btn-lsm-del">DELETE Key</button>
+              </div>
+              <div class="read-pipeline-result" id="lsm-read-feedback">
+                <span class="status-indicator">Ready for distributed read/write requests.</span>
+              </div>
+            </div>
+            <!-- Dynamic Distributed Replication Pipeline Trace -->
+            <div id="lsm-replication-trace"></div>
+          </div>
+
+          <!-- 3-Tier Visual Pipeline -->
+          <div class="lsm-pipeline-grid">
+            <!-- 1. WAL Tier -->
+            <div class="card lsm-tier-card">
+              <div class="tier-badge wal-badge">Tier 1: WAL (Append-Only Log)</div>
+              <div class="tier-meta">Immediate disk append with CRC32 checksum for durability.</div>
+              <div class="wal-tape" id="wal-tape">
+                <!-- WAL records rendered as append-log entries -->
+              </div>
+              <div class="tier-footer">
+                <span>Total Logged: <strong id="wal-entry-count">0</strong> writes</span>
+              </div>
+            </div>
+
+            <!-- 2. MemTable Tier -->
+            <div class="card lsm-tier-card">
+              <div class="tier-badge memtable-badge">Tier 2: MemTable (In-Memory SkipList)</div>
+              <div class="tier-meta">
+                <span>Capacity: <strong id="memtable-capacity-txt">0 / 4</strong> entries</span>
+                <div class="progress-bar-container">
+                  <div class="progress-bar" id="memtable-progress" style="width: 0%;"></div>
+                </div>
+              </div>
+              <div class="memtable-items-list" id="memtable-items">
+                <!-- Memtable sorted key-value pairs -->
+                <div class="empty-state">MemTable is currently empty</div>
+              </div>
+              <div class="tier-footer">
+                <span>Auto-flushes when threshold is reached</span>
+              </div>
+            </div>
+
+            <!-- 3. SSTables Tier -->
+            <div class="card lsm-tier-card">
+              <div class="tier-badge sstable-badge">Tier 3: SSTables on Disk (Immutable)</div>
+              <div class="tier-meta">Flushed Level-0 tables with Bloom filters & sparse index.</div>
+              <div class="sstables-deck" id="sstables-deck">
+                <!-- SSTable cards showing Bloom filter bits and Sparse Index -->
+                <div class="empty-state">No SSTables on disk yet. Trigger a flush to create one.</div>
+              </div>
+              <div class="tier-footer">
+                <span>Total SSTables: <strong id="sstable-count">0</strong> files</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cluster Key Distribution & Replication Matrix Table -->
+          <div class="card cluster-keys-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Cluster-Wide Key Distribution & Replication Matrix</h3>
+                <p class="card-desc">Full visibility into keys stored across the distributed cluster. Shows Consistent Hash Ring assignment, Gossip node health, and replica consistency.</p>
+              </div>
+              <button class="btn btn-xs btn-outline" id="btn-refresh-cluster-keys">Refresh Key Matrix</button>
+            </div>
+            <div class="table-container">
+              <table class="data-table" id="cluster-keys-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Primary Replica</th>
+                    <th>Target Replicas (N=2)</th>
+                    <th>Storage on Nodes</th>
+                    <th>Causal Vector Clock</th>
+                    <th>Replica Consistency Status</th>
+                  </tr>
+                </thead>
+                <tbody id="cluster-keys-table-body">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 4: Vector Clocks & Causal Conflicts -->
+      <!-- ================================================================= -->
+      <section id="section-vector-clock" class="tab-pane">
+        <div class="pane-grid two-col">
+          <!-- Left: Interactive Causality Graph -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Causal Versioning Timeline (Dynamo Model)</h3>
+                <p class="card-desc">Vector clocks capture causal dependencies between writes across different servers to detect concurrent conflicts.</p>
+              </div>
+              <button class="btn btn-sm btn-outline" id="btn-reset-vc-scenario">Reset Scenario</button>
+            </div>
+
+            <div class="vc-scenario-timeline" id="vc-timeline">
+              <!-- Visual nodes representing D1 -> D2 -> D3 / D4 concurrent branch -> D5 merged -->
+            </div>
+
+            <div class="vc-action-stepper">
+              <h4>ByteByteGo Conflict Simulation</h4>
+              <div class="stepper-buttons">
+                <button class="btn btn-sm btn-secondary" id="btn-step-d1">1. Write D1 via Sx</button>
+                <button class="btn btn-sm btn-secondary" id="btn-step-d2">2. Update D2 via Sx</button>
+                <button class="btn btn-sm btn-warning" id="btn-step-d3">3. Fork D3 via Sy</button>
+                <button class="btn btn-sm btn-warning" id="btn-step-d4">4. Fork D4 via Sz</button>
+                <button class="btn btn-sm btn-success" id="btn-step-d5">5. Reconcile & Merge D5</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Clock Comparator & Custom Builder -->
+          <div class="side-controls-column">
+            <!-- Custom Clock Comparison Playground -->
+            <div class="card control-card">
+              <div class="card-header">
+                <h3>Interactive Clock Comparator</h3>
+              </div>
+              
+              <div class="clock-builder-pair">
+                <!-- Clock A -->
+                <div class="clock-box" id="clock-a-box">
+                  <div class="clock-box-header">
+                    <strong>Vector Clock A</strong>
+                    <button class="btn btn-xs btn-outline" id="btn-add-server-a">+ Node</button>
+                  </div>
+                  <div class="counters-list" id="clock-a-counters">
+                    <!-- Sliders or counters for clock A -->
+                  </div>
+                </div>
+
+                <!-- Clock B -->
+                <div class="clock-box" id="clock-b-box">
+                  <div class="clock-box-header">
+                    <strong>Vector Clock B</strong>
+                    <button class="btn btn-xs btn-outline" id="btn-add-server-b">+ Node</button>
+                  </div>
+                  <div class="counters-list" id="clock-b-counters">
+                    <!-- Sliders or counters for clock B -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Comparison Verdict Banner -->
+              <div class="comparison-verdict" id="vc-verdict-card">
+                <div class="verdict-pill concurrent" id="vc-verdict-pill">
+                  CONCURRENT CONFLICT ⚠️
+                </div>
+                <p class="verdict-detail" id="vc-verdict-detail">
+                  Neither clock dominates. Both contain independent concurrent updates that need reconciliation!
+                </p>
+                <button class="btn btn-primary btn-block" id="btn-execute-merge">
+                  Merge Clocks (Element-wise Maximum)
+                </button>
+              </div>
+            </div>
+
+            <!-- Merged Clock Result -->
+            <div class="card control-card" id="merged-result-card" style="display: none;">
+              <div class="card-header">
+                <h3>Resolved Merged Clock</h3>
+              </div>
+              <div class="merged-display" id="merged-clock-display">
+                <!-- Rendered merged clock -->
+              </div>
+            </div>
+
+            <!-- Live Cluster Keys Causality Inspector -->
+            <div class="card control-card" style="margin-top: 1rem;">
+              <div class="card-header">
+                <h3>Live Cluster Keys Causality</h3>
+              </div>
+              <p class="hint-text">Select any key written in the cluster to inspect its real C++ Vector Clock across replica nodes.</p>
+              <div class="input-row">
+                <select id="select-vc-cluster-key" class="dropdown-select" style="flex: 1;"></select>
+                <button class="btn btn-secondary" id="btn-inspect-vc-key">Inspect</button>
+              </div>
+              <div id="vc-live-key-feedback" style="margin-top: 0.65rem; font-family: var(--font-mono); font-size: 0.8rem; color: #22d3ee;"></div>
+              <button class="btn btn-warning btn-block" id="btn-simulate-concurrent-write" style="margin-top: 0.75rem;">
+                ⚡ Simulate Concurrent Split-Brain Write
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- TAB 5: Merkle Tree Anti-Entropy -->
+      <!-- ================================================================= -->
+      <section id="section-merkle-tree" class="tab-pane">
+        <div class="merkle-container">
+          <!-- Top Control Header -->
+          <div class="card merkle-controls">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3>Anti-Entropy Replica Synchronization (Merkle Tree Diff)</h3>
+                <p class="card-desc">Compare two replica hash trees. When root hashes differ, walk down the tree to isolate divergent buckets without scanning the full key space.</p>
+              </div>
+              <div class="actions-group">
+                <button class="btn btn-warning" id="btn-inject-divergence">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                  <span>Mutate Key in Replica B</span>
+                </button>
+                <button class="btn btn-primary" id="btn-run-merkle-diff">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <span>Step-by-Step Tree Diff</span>
+                </button>
+                <button class="btn btn-secondary" id="btn-sync-replicas">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  <span>Repair & Synchronize</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Root Hash Comparison Ribbon -->
+            <div class="merkle-root-ribbon">
+              <div class="root-hash-badge">
+                <span class="label">Replica A Root Hash:</span>
+                <span class="hash-code" id="root-hash-a">0x8a7f...e201</span>
+              </div>
+              <div class="root-comparison-badge" id="root-comparison-badge">
+                <span class="status-icon">≠</span>
+                <span class="status-msg">ROOTS DIVERGE</span>
+              </div>
+              <div class="root-hash-badge">
+                <span class="label">Replica B Root Hash:</span>
+                <span class="hash-code" id="root-hash-b">0x3b1c...7d99</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Side-by-side Visual Trees -->
+          <div class="merkle-trees-grid">
+            <!-- Replica A Tree -->
+            <div class="card tree-card">
+              <div class="tree-header">
+                <div class="input-with-label">
+                  <label for="merkle-select-node-a">Node A:</label>
+                  <select id="merkle-select-node-a" class="dropdown-select"></select>
+                </div>
+                <span class="tag tag-primary">Reference Replica</span>
+              </div>
+              <div class="tree-canvas-wrapper" id="tree-a-wrapper">
+                <svg id="tree-a-svg" class="tree-svg"></svg>
+              </div>
+              <div class="tree-data-preview" id="tree-a-data">
+                <!-- Key-values list for Replica A -->
+              </div>
+            </div>
+
+            <!-- Replica B Tree -->
+            <div class="card tree-card">
+              <div class="tree-header">
+                <div class="input-with-label">
+                  <label for="merkle-select-node-b">Node B:</label>
+                  <select id="merkle-select-node-b" class="dropdown-select"></select>
+                </div>
+                <span class="tag tag-warning">Target Replica</span>
+              </div>
+              <div class="tree-canvas-wrapper" id="tree-b-wrapper">
+                <svg id="tree-b-svg" class="tree-svg"></svg>
+              </div>
+              <div class="tree-data-preview" id="tree-b-data">
+                <!-- Key-values list for Replica B -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Diff Search Explanation Step Bar -->
+          <div class="card diff-explanation-bar" id="diff-explanation-bar">
+            <div class="step-num">DIFF RESULT</div>
+            <div class="step-desc" id="diff-status-text">
+              Click "Step-by-Step Tree Diff" to visualize how Merkle trees prune matching subtrees in O(log N) and identify diverging leaf buckets.
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Built with C++17 Distributed Core • Consistent Hashing, Gossip Protocol, LSM Storage, Vector Clocks & Merkle Trees</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
