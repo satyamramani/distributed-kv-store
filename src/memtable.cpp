@@ -1,5 +1,7 @@
 #include "kvstore/memtable.h"
 
+#include <chrono>
+
 namespace kvstore {
 
 // ── Helper ──────────────────────────────────────────────────────────────────
