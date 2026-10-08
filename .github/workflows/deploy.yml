@@ -1,0 +1,38 @@
+name: Build and Deploy KV-Store
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+
+jobs:
+  deploy:
+    name: Build & Deploy to Server
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build KV-Store Server
+        run: |
+          echo "Building Release binary..."
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=OFF
+          cmake --build build --target kvstore_server -j$(nproc 2>/dev/null || echo 2)
+
+      - name: Deploy to /opt/kvstore
+        run: |
+          echo "Copying binary and web assets to /opt/kvstore..."
+          mkdir -p /opt/kvstore/web
+          cp build/bin/kvstore_server /opt/kvstore/
+          cp -r web/* /opt/kvstore/web/
+
+      - name: Restart KV-Store Service
+        run: |
+          echo "Restarting kvstore.service..."
+          sudo systemctl restart kvstore
+          sleep 1
+          sudo systemctl --no-pager status kvstore

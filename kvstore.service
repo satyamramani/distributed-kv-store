@@ -1,0 +1,14 @@
+[Unit]
+Description=Distributed KV-Store Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/kvstore
+ExecStart=/opt/kvstore/kvstore_server 8384
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
