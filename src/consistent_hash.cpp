@@ -11,15 +11,17 @@ namespace kvstore {
 // Both nodes and keys are hashed onto this circle. To find which node
 // owns a key, you hash the key and walk clockwise until you hit a node.
 //
-//         0
-//        / \
-//    [N1#0]  [N2#2]       ← virtual nodes placed on the ring
-//    /            \
-//  key-X → walks clockwise → lands on N2#2 → owned by node-2
-//    \            /
-//    [N2#0]  [N1#1]
-//        \ /
-//        2^32
+/*
+         0
+        / \
+    [N1#0]  [N2#2]       ← virtual nodes placed on the ring
+    /            \
+  key-X → walks clockwise → lands on N2#2 → owned by node-2
+    \            /
+    [N2#0]  [N1#1]
+        \ /
+        2^32
+*/
 //
 // num_virtual_nodes_ controls how many positions each physical node gets
 // on the ring. More virtual nodes = more even key distribution.

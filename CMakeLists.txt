@@ -16,6 +16,7 @@ set(KVSTORE_WARNINGS
     -Wextra
     -Wpedantic
     -Werror
+    -Wno-error=comment
     -Wshadow
     -Wconversion
     -Wsign-conversion
