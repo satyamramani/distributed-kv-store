@@ -25,14 +25,19 @@ jobs:
 
       - name: Deploy to /opt/kvstore
         run: |
-          echo "Copying binary and web assets to /opt/kvstore..."
+          echo "Preparing /opt/kvstore..."
           mkdir -p /opt/kvstore/web
-          cp build/bin/kvstore_server /opt/kvstore/
+          echo "Stopping service if running to release binary lock..."
+          sudo systemctl stop kvstore || true
+          echo "Installing new binary and web assets..."
+          cp build/bin/kvstore_server /opt/kvstore/kvstore_server.tmp
+          mv -f /opt/kvstore/kvstore_server.tmp /opt/kvstore/kvstore_server
+          chmod +x /opt/kvstore/kvstore_server
           cp -r web/* /opt/kvstore/web/
 
       - name: Restart KV-Store Service
         run: |
-          echo "Restarting kvstore.service..."
+          echo "Starting kvstore.service..."
           sudo systemctl restart kvstore
           sleep 1
           systemctl --no-pager status kvstore
