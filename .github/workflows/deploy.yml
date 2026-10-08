@@ -35,4 +35,4 @@ jobs:
           echo "Restarting kvstore.service..."
           sudo systemctl restart kvstore
           sleep 1
-          sudo systemctl --no-pager status kvstore
+          systemctl --no-pager status kvstore
